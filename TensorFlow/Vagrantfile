@@ -1,0 +1,36 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+Vagrant.configure(2) do |config|
+  # proxy config
+  if Vagrant.has_plugin?("vagrant-proxyconf")
+    config.proxy.http = ENV["http_proxy"]
+    config.proxy.https = ENV["https_proxy"]
+    config.proxy.no_proxy = "127.0.0.1,localhost"
+  end
+
+  config.vm.box = "ubuntu/trusty64"
+
+  config.vm.provider "virtualbox" do |vb|
+    vb.memory = 2048
+    vb.cpus = 4
+  end
+
+  config.vm.network "private_network", ip: "192.168.33.10"
+  config.vm.network "forwarded_port", guest: 3000, host: 3000
+
+  config.ssh.forward_x11 = true
+
+  config.vm.provision "shell", privileged: false, inline: <<-SHELL
+    sudo apt-get update
+    sudo apt-get install -y git
+    sudo apt-get install -y python-dev python-pip python-virtualenv
+    sudo apt-get install -y libjpeg-dev zlib1g-dev
+    virtualenv --always-copy --system-site-packages /vagrant/tensorflow
+    source /vagrant/tensorflow/bin/activate
+    pip install -U https://storage.googleapis.com/tensorflow/linux/cpu/tensorflow-0.8.0-cp27-none-linux_x86_64.whl
+    git clone https://github.com/tflearn/tflearn.git /vagrant/tflearn
+    pip install -U /vagrant/tflearn
+    echo "source /vagrant/tensorflow/bin/activate" >> ~/.bashrc
+  SHELL
+end
