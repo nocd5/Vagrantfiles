@@ -1,0 +1,69 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+Vagrant.configure(2) do |config|
+  # proxy config
+  if Vagrant.has_plugin?("vagrant-proxyconf")
+    config.proxy.http = ENV["http_proxy"]
+    config.proxy.https = ENV["https_proxy"]
+    config.proxy.no_proxy = "127.0.0.1,localhost"
+  end
+
+  config.vm.box = "ubuntu/trusty64"
+
+  config.vm.provider "virtualbox" do |vb|
+    vb.memory = 2048
+    vb.cpus = 4
+  end
+
+  config.vm.provision "shell", privileged: false, inline: <<-SHELL
+    sudo apt-get update
+    sudo apt-get install -y git guilt
+    sudo apt-get install -y libpython2.7-dev libpython3.4-dev
+    sudo aptitude -V -D -y install mingw-w64
+    git config --global user.name "$USER"
+    git config --global user.email "$USER@example.com"
+    git clone https://github.com/vim/vim /vagrant/vim
+    git clone https://github.com/koron/vim-kaoriya-patches /vagrant/vim/.git/patches
+    git clone https://github.com/nocd5/vim-patches /vagrant/vim-patches
+    git clone https://github.com/lua/lua /vagrant/lua
+    git clone https://github.com/koron/cmigemo /vagrant/cmigemo
+    pushd /vagrant/lua/src
+    # `strip lua53.dll` will be failed
+    # strip lua53.dll manually for workaround
+    # (issue of virtualbox https://www.virtualbox.org/ticket/8463)
+    make mingw CC="i686-w64-mingw32-gcc -std=gnu99" --keep-going
+    i686-w64-mingw32-strip /vagrant/lua/src/lua53.dll -o /tmp/lua53.dll && mv /tmp/lua53.dll /vagrant/lua/src/lua53.dll
+    popd
+    pushd /vagrant/cmigemo
+    git apply /vagrant/cmigemo_support_cross_build.patch
+    make CC="i686-w64-mingw32-gcc" mingw DLLWRAP=i686-w64-mingw32-dllwrap
+    popd
+    pushd /vagrant/vim
+    guilt push -a
+    git apply /vagrant/vim-patches/migemo_support_cyg_ming.patch
+    git apply /vagrant/vim-patches/tabline-dnd.patch
+    git apply /vagrant/vim-patches/tabline-close.patch
+    popd
+    # workaround for if_python/if_python3 error
+    sudo mv /usr/include/python2.7/pyconfig.h /usr/include/python2.7/pyconfig.h.bak
+    sudo mv /usr/include/python3.4/pyconfig.h /usr/include/python3.4/pyconfig.h.bak
+    sudo touch /usr/include/python2.7/pyconfig.h
+    sudo touch /usr/include/python3.4/pyconfig.h
+    pushd /vagrant/vim/src
+    make -f Make_ming.mak CROSS_COMPILE=i686-w64-mingw32- WINDRES=i686-w64-mingw32-windres \
+        GUI=no IME=yes MIGEMO=yes \
+        LUA=/vagrant/lua/src DYNAMIC_LUA=yes LUA_VER=53 \
+        PYTHON=yes PYTHONINC="-I/usr/include/python2.7" PYTHON_VER=27 \
+        PYTHON3=yes PYTHON3INC="-I/usr/include/python3.4 -DSIZEOF_WCHAR_T=2 -DSIZEOF_INT=4 -DSIZEOF_SHORT=2" PYTHON3_VER=34
+    make -f Make_ming.mak CROSS_COMPILE=i686-w64-mingw32- WINDRES=i686-w64-mingw32-windres \
+        GUI=yes IME=yes MIGEMO=yes \
+        LUA=/vagrant/lua/src DYNAMIC_LUA=yes LUA_VER=53 \
+        PYTHON=yes PYTHONINC="-I/usr/include/python2.7" PYTHON_VER=27 \
+        PYTHON3=yes PYTHON3INC="-I/usr/include/python3.4 -DSIZEOF_WCHAR_T=2 -DSIZEOF_INT=4 -DSIZEOF_SHORT=2" PYTHON3_VER=34
+    popd
+    # restore original pyconfig.h
+    sudo mv /usr/include/python2.7/pyconfig.h.bak /usr/include/python2.7/pyconfig.h
+    sudo mv /usr/include/python3.4/pyconfig.h.bak /usr/include/python3.4/pyconfig.h
+  SHELL
+end

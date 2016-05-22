@@ -1,0 +1,21 @@
+diff --git a/compile/Make_mingw.mak b/compile/Make_mingw.mak
+index d86af84..a82cbc8 100644
+--- a/compile/Make_mingw.mak
++++ b/compile/Make_mingw.mak
+@@ -15,6 +15,7 @@ EXEEXT = .exe
+ CFLAGS_MIGEMO =
+ LDFLAGS_MIGEMO =
+ CC = gcc
++DLLWRAP = dllwrap
+ 
+ include config.mk
+ include compile/unix.mak
+@@ -27,7 +28,7 @@ include compile/clean.mak
+ #
+ $(libmigemo_LIB): $(libmigemo_DSO)
+ $(libmigemo_DSO): $(libmigemo_OBJ) $(srcdir)migemo.def
+-	dllwrap -o $(libmigemo_DSO) --dllname $(DLLNAME) --implib $(libmigemo_LIB) --def $(srcdir)migemo.def $(libmigemo_OBJ)
++	$(DLLWRAP) -o $(libmigemo_DSO) --dllname $(DLLNAME) --implib $(libmigemo_LIB) --def $(srcdir)migemo.def $(libmigemo_OBJ)
+ 
+ install-lib: $(libmigemo_DSO) $(libmigemo_LIB)
+ 	$(INSTALL_DATA)		$(libmigemo_LIB) $(libdir)
