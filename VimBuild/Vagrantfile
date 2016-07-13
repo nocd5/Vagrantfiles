@@ -1,75 +1,96 @@
 # -*- mode: ruby -*-
 # vi: set ft=ruby :
 
+require 'fileutils'
+
+THIS_DIR = File.dirname(__FILE__)
+GUEST_DIR = '/vagrant'
+HOST_DIR = File.join(THIS_DIR, 'vagrant')
+WORK_DIR = '${HOME}'
+
 Vagrant.configure(2) do |config|
   # proxy config
-  if Vagrant.has_plugin?("vagrant-proxyconf")
-    config.proxy.http = ENV["http_proxy"]
-    config.proxy.https = ENV["https_proxy"]
-    config.proxy.no_proxy = "127.0.0.1,localhost"
+  if Vagrant.has_plugin?('vagrant-proxyconf')
+    config.proxy.http = ENV['http_proxy']
+    config.proxy.https = ENV['https_proxy']
+    config.proxy.no_proxy = '127.0.0.1,localhost'
   end
 
-  config.vm.box = "ubuntu/trusty64"
+  config.vm.box = 'ubuntu/trusty64'
 
-  config.vm.provider "virtualbox" do |vb|
-    vb.memory = 2048
+  config.vm.provider 'virtualbox' do |vb|
+    vb.memory = 1024
     vb.cpus = 4
   end
 
-  config.vm.provision "shell", privileged: false, inline: <<-SHELL
+  config.vm.synced_folder HOST_DIR, GUEST_DIR, type: 'virtualbox', create: true
+
+  FileUtils.mkdir_p(HOST_DIR)
+  FileUtils.copy(File.join(THIS_DIR, 'cmigemo_support_cross_build.patch'), HOST_DIR)
+
+  config.vm.provision 'shell', privileged: false, inline: <<-SHELL
+    mkdir #{GUEST_DIR}/log
+    mkdir #{GUEST_DIR}/build
+
     sudo apt-get update
     sudo apt-get install -y git guilt
     sudo aptitude -V -D -y install mingw-w64
-    git config --global user.name "$USER"
-    git config --global user.email "$USER@example.com"
-    git clone https://github.com/vim/vim ~/vim
-    git clone https://github.com/koron/vim-kaoriya-patches ~/vim/.git/patches
-    git clone https://github.com/nocd5/vim-patches ~/vim-patches
-    git clone https://github.com/lua/lua ~/lua
-    git clone https://github.com/koron/cmigemo ~/cmigemo
-    git clone --single-branch -b 2.7 https://github.com/python/cpython ~/python27
-    git clone --single-branch -b 3.5 https://github.com/python/cpython ~/python35
-    cp ~/python27/PC/pyconfig.h ~/python27/Include
-    cp ~/python35/PC/pyconfig.h ~/python35/Include
+
+    git config --global user.name "${USER}"
+    git config --global user.email "${USER}@${HOST}"
+
+    git clone https://github.com/vim/vim #{WORK_DIR}/vim
+    git clone https://github.com/koron/vim-kaoriya-patches #{WORK_DIR}/vim/.git/patches
+    git clone https://github.com/nocd5/vim-patches #{WORK_DIR}/vim-patches
+    git clone https://github.com/lua/lua #{WORK_DIR}/lua
+    git clone https://github.com/koron/cmigemo #{WORK_DIR}/cmigemo
+    git clone --depth 1 --single-branch -b 2.7 https://github.com/python/cpython #{WORK_DIR}/python27
+    git clone --depth 1 --single-branch -b 3.5 https://github.com/python/cpython #{WORK_DIR}/python35
+    cp #{WORK_DIR}/python27/PC/pyconfig.h #{WORK_DIR}/python27/Include
+    cp #{WORK_DIR}/python35/PC/pyconfig.h #{WORK_DIR}/python35/Include
+
     # build lua
-    pushd ~/lua/src
+    pushd #{WORK_DIR}/lua/src
     make mingw CC="i686-w64-mingw32-gcc -std=gnu99 -static-libgcc" -j4
     popd
+
     # build cmigemo
-    pushd ~/cmigemo
-    git apply /vagrant/cmigemo_support_cross_build.patch
+    pushd #{WORK_DIR}/cmigemo
+    git apply -v #{GUEST_DIR}/cmigemo_support_cross_build.patch
     make CC="i686-w64-mingw32-gcc" mingw DLLWRAP=i686-w64-mingw32-dllwrap -j4
     popd
+
     # build vim
-    pushd ~/vim
-    guilt push -a
-    git apply ~/vim-patches/migemo_support_cyg_ming.patch
-    git apply ~/vim-patches/tabline-dnd.patch
-    git apply ~/vim-patches/tabline-close.patch
+    pushd #{WORK_DIR}/vim
+    guilt push -a -f                                                       2>&1 | tee    #{GUEST_DIR}/log/patch.log
+    git apply -v #{WORK_DIR}/vim-patches/migemo_support_cyg_ming.patch     2>&1 | tee -a #{GUEST_DIR}/log/patch.log
+    git apply -v #{WORK_DIR}/vim-patches/tabline-dnd.patch                 2>&1 | tee -a #{GUEST_DIR}/log/patch.log
+    git apply -v #{WORK_DIR}/vim-patches/tabline-close.patch               2>&1 | tee -a #{GUEST_DIR}/log/patch.log
+    git apply -v #{WORK_DIR}/vim-patches/avoid_parallel_build_racing.patch 2>&1 | tee -a #{GUEST_DIR}/log/patch.log
     popd
-    pushd ~/vim/src
+    pushd #{WORK_DIR}/vim/src
     make -f Make_ming.mak CROSS_COMPILE=i686-w64-mingw32- WINDRES=i686-w64-mingw32-windres \
         GUI=no IME=yes MIGEMO=yes \
-        LUA=~/lua/src DYNAMIC_LUA=yes LUA_VER=53 \
-        PYTHON=yes PYTHON_HOME=C:/python PYTHONINC="-I ~/python27/Include" PYTHON_VER=27 \
-        PYTHON3=yes PYTHON3_HOME=C:/python3 PYTHON3INC="-I ~/python35/Include" PYTHON3_VER=35 \
-        -j4
+        LUA=#{WORK_DIR}/lua/src DYNAMIC_LUA=yes LUA_VER=53 \
+        PYTHON=yes PYTHON_HOME=C:/python PYTHONINC="-I #{WORK_DIR}/python27/Include" PYTHON_VER=27 \
+        PYTHON3=yes PYTHON3_HOME=C:/python3 PYTHON3INC="-I #{WORK_DIR}/python35/Include" PYTHON3_VER=35 \
+        -j4 2>&1 | tee #{GUEST_DIR}/log/make_vim.log
     make -f Make_ming.mak CROSS_COMPILE=i686-w64-mingw32- WINDRES=i686-w64-mingw32-windres \
         GUI=yes IME=yes MIGEMO=yes \
-        LUA=~/lua/src DYNAMIC_LUA=yes LUA_VER=53 \
-        PYTHON=yes PYTHON_HOME=C:/python PYTHONINC="-I ~/python27/Include" PYTHON_VER=27 \
-        PYTHON3=yes PYTHON3_HOME=C:/python3 PYTHON3INC="-I ~/python35/Include" PYTHON3_VER=35 \
-        -j4
+        LUA=#{WORK_DIR}/lua/src DYNAMIC_LUA=yes LUA_VER=53 \
+        PYTHON=yes PYTHON_HOME=C:/python PYTHONINC="-I #{WORK_DIR}/python27/Include" PYTHON_VER=27 \
+        PYTHON3=yes PYTHON3_HOME=C:/python3 PYTHON3INC="-I #{WORK_DIR}/python35/Include" PYTHON3_VER=35 \
+        -j4 2>&1 | tee #{GUEST_DIR}/log/make_gvim.log
     popd
+
     # copy files
-    mkdir /vagrant/build
     cp -r \
-        ~/lua/src/lua53.dll \
-        ~/cmigemo/build/migemo.dll \
-        ~/vim/src/vim.exe \
-        ~/vim/src/gvim.exe \
-        ~/vim/src/vimrun.exe \
-        ~/vim/runtime \
-        /vagrant/build
+        #{WORK_DIR}/lua/src/lua53.dll \
+        #{WORK_DIR}/cmigemo/build/migemo.dll \
+        #{WORK_DIR}/vim/src/vim.exe \
+        #{WORK_DIR}/vim/src/gvim.exe \
+        #{WORK_DIR}/vim/src/vimrun.exe \
+        #{WORK_DIR}/vim/runtime \
+        #{GUEST_DIR}/build
   SHELL
 end
