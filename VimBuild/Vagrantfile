@@ -33,6 +33,7 @@ Vagrant.configure(2) do |config|
     mkdir #{GUEST_DIR}/build
 
     sudo apt-get update
+    sudo apt-get install -y build-essential
     sudo apt-get install -y git guilt
     sudo aptitude -V -D -y install mingw-w64
 
@@ -42,22 +43,16 @@ Vagrant.configure(2) do |config|
     git clone https://github.com/vim/vim #{WORK_DIR}/vim
     git clone https://github.com/koron/vim-kaoriya-patches #{WORK_DIR}/vim/.git/patches
     git clone https://github.com/nocd5/vim-patches #{WORK_DIR}/vim-patches
-    mkdir -p #{WORK_DIR}/lua
-    curl https://www.lua.org/ftp/lua-5.3.4.tar.gz | tar zx -C #{WORK_DIR}/lua --strip=1
+    git clone https://github.com/LuaJit/LuaJit #{WORK_DIR}/LuaJit
     git clone https://github.com/koron/cmigemo #{WORK_DIR}/cmigemo
     git clone --depth 1 --single-branch -b 2.7 https://github.com/python/cpython #{WORK_DIR}/python27
-    git clone --depth 1 --single-branch -b 3.5 https://github.com/python/cpython #{WORK_DIR}/python35
+    git clone --depth 1 --single-branch -b 3.6 https://github.com/python/cpython #{WORK_DIR}/python36
     cp #{WORK_DIR}/python27/PC/pyconfig.h #{WORK_DIR}/python27/Include
-    cp #{WORK_DIR}/python35/PC/pyconfig.h #{WORK_DIR}/python35/Include
+    cp #{WORK_DIR}/python36/PC/pyconfig.h #{WORK_DIR}/python36/Include
 
     # build lua
-    pushd #{WORK_DIR}/lua/src
-    make lua53.dll LUA_A="lua53.dll" \
-        CC="x86_64-w64-mingw32-gcc" \
-        AR="x86_64-w64-mingw32-gcc -shared -s -Wl,--out-implib,liblua.dll.a -o" \
-        RANLIB="file" \
-        MYLIBS= MYCFLAGS="-DLUA_BUILD_AS_DLL -DLUA_COMPAT_5_2 -ULUA_USE_LINUX" \
-        -j4
+    pushd #{WORK_DIR}/LuaJit
+    make CROSS="x86_64-w64-mingw32-" TARGET_SYS="Windows" TARGET_FLAGS="-U__USING_SJLJ_EXCEPTIONS__"
     popd
 
     # build cmigemo
@@ -78,21 +73,22 @@ Vagrant.configure(2) do |config|
     pushd #{WORK_DIR}/vim/src
     make -f Make_ming.mak CROSS_COMPILE=x86_64-w64-mingw32- WINDRES=x86_64-w64-mingw32-windres \
         GUI=no IME=yes MIGEMO=yes \
-        LUA=#{WORK_DIR}/lua/src DYNAMIC_LUA=yes LUA_VER=53 \
+        LUA=#{WORK_DIR}/LuaJit/src DYNAMIC_LUA=yes LUA_VER=51 \
         PYTHON=yes PYTHON_HOME=C:/python PYTHONINC="-I #{WORK_DIR}/python27/Include" PYTHON_VER=27 \
-        PYTHON3=yes PYTHON3_HOME=C:/python3 PYTHON3INC="-I #{WORK_DIR}/python35/Include" PYTHON3_VER=35 \
+        PYTHON3=yes PYTHON3_HOME=C:/python3 PYTHON3INC="-I #{WORK_DIR}/python36/Include" PYTHON3_VER=36 \
         -j4 2>&1 | tee #{GUEST_DIR}/log/make_vim.log
     make -f Make_ming.mak CROSS_COMPILE=x86_64-w64-mingw32- WINDRES=x86_64-w64-mingw32-windres \
         GUI=yes PROPORTIONAL_FONTS=yes IME=yes MIGEMO=yes \
-        LUA=#{WORK_DIR}/lua/src DYNAMIC_LUA=yes LUA_VER=53 \
+        LUA=#{WORK_DIR}/LuaJit/src DYNAMIC_LUA=yes LUA_VER=51 \
         PYTHON=yes PYTHON_HOME=C:/python PYTHONINC="-I #{WORK_DIR}/python27/Include" PYTHON_VER=27 \
-        PYTHON3=yes PYTHON3_HOME=C:/python3 PYTHON3INC="-I #{WORK_DIR}/python35/Include" PYTHON3_VER=35 \
+        PYTHON3=yes PYTHON3_HOME=C:/python3 PYTHON3INC="-I #{WORK_DIR}/python36/Include" PYTHON3_VER=36 \
         -j4 2>&1 | tee #{GUEST_DIR}/log/make_gvim.log
     popd
 
     # copy files
     cp -r \
-        #{WORK_DIR}/lua/src/lua53.dll \
+        #{WORK_DIR}/LuaJit/src/lua51.dll \
+        #{WORK_DIR}/LuaJit/src/jit \
         #{WORK_DIR}/cmigemo/build/migemo.dll \
         #{WORK_DIR}/vim/src/vim.exe \
         #{WORK_DIR}/vim/src/gvim.exe \
