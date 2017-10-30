@@ -27,7 +27,6 @@ Vagrant.configure(2) do |config|
 
   FileUtils.mkdir_p(HOST_DIR)
   FileUtils.copy(File.join(THIS_DIR, 'cmigemo_support_cross_build.patch'), HOST_DIR)
-  FileUtils.copy(File.join(THIS_DIR, 'libvterm_support_cross_build.patch'), HOST_DIR)
 
   config.vm.provision 'shell', privileged: false, inline: <<-SHELL
     mkdir #{GUEST_DIR}/log
@@ -66,16 +65,11 @@ Vagrant.configure(2) do |config|
     pushd #{WORK_DIR}/vim
     guilt push -a -f                                                       2>&1 | tee    #{GUEST_DIR}/log/patch.log
     git apply -v #{WORK_DIR}/vim-patches/migemo_support_cyg_ming.patch     2>&1 | tee -a #{GUEST_DIR}/log/patch.log
-    git apply -v #{WORK_DIR}/vim-patches/tabline-dnd.patch                 2>&1 | tee -a #{GUEST_DIR}/log/patch.log
     git apply -v #{WORK_DIR}/vim-patches/tabline-close.patch               2>&1 | tee -a #{GUEST_DIR}/log/patch.log
     git apply -v #{WORK_DIR}/vim-patches/feat_proportional_fonts.patch     2>&1 | tee -a #{GUEST_DIR}/log/patch.log
     git apply -v #{WORK_DIR}/vim-patches/avoid_parallel_build_racing.patch 2>&1 | tee -a #{GUEST_DIR}/log/patch.log
-    git apply -v #{GUEST_DIR}/libvterm_support_cross_build.patch           2>&1 | tee -a #{GUEST_DIR}/log/patch.log
     popd
     pushd #{WORK_DIR}/vim/src
-    ## build libvterm
-    make -f Make_ming.mak libvterm/.libs/libvterm.a CROSS_COMPILE=x86_64-w64-mingw32- \
-        -j4 2>&1 | tee #{GUEST_DIR}/log/make_vim.log
     make -f Make_ming.mak CROSS_COMPILE=x86_64-w64-mingw32- WINDRES=x86_64-w64-mingw32-windres \
         GUI=no IME=yes MIGEMO=yes TERMINAL=yes \
         LUA=#{WORK_DIR}/LuaJit/src DYNAMIC_LUA=yes LUA_VER=51 \
